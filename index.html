@@ -38,18 +38,23 @@
   <script>
     var allData = [];
 
-    window.onload = function () {
-      var xhr = new XMLHttpRequest();
-      xhr.open("GET", "data/redevelopment.json", true);
-      xhr.onreadystatechange = function () {
-        if (xhr.readyState === 4 && xhr.status === 200) {
-          var json = JSON.parse(xhr.responseText);
-          allData = json.DATA;
-          renderTable(allData);
-        }
-      };
-      xhr.send();
-    };
+window.onload = function () {
+  fetch("./data/redevelopment.json")
+    .then(function (response) {
+      if (!response.ok) {
+        throw new Error("네트워크 응답에 문제가 있습니다.");
+      }
+      return response.json();
+    })
+    .then(function (json) {
+      allData = json.DATA;
+      renderTable(allData);
+    })
+    .catch(function (error) {
+      console.error("JSON을 불러오는 중 오류 발생:", error);
+    });
+};
+
 
     function renderTable(data) {
       var tbody = document.querySelector("#resultTable tbody");
