@@ -16,12 +16,13 @@
 
   <div>
     <input type="text" id="keyword" placeholder="정비구역명칭, 자치구 등 검색">
-    <select id="filterCgg"><option value="">자치구 전체</option></select>
+    <select id="filterCgg" onchange="updateStdgFilter()"><option value="">자치구 전체</option></select>
     <select id="filterStdg"><option value="">법정동 전체</option></select>
     <select id="filterBiz"><option value="">사업구분 전체</option></select>
     <select id="filterStep"><option value="">진행단계 전체</option></select>
     <select id="filterStatus"><option value="">상태 전체</option></select>
     <button onclick="search()">검색</button>
+    <button onclick="resetFilters()">초기화</button>
   </div>
 
   <table id="resultTable">
@@ -48,9 +49,7 @@
     window.onload = function () {
       fetch("./data/redevelopment.json")
         .then(function (response) {
-          if (!response.ok) {
-            throw new Error("네트워크 응답에 문제가 있습니다.");
-          }
+          if (!response.ok) throw new Error("네트워크 오류");
           return response.json();
         })
         .then(function (json) {
@@ -59,7 +58,7 @@
           renderTable(allData);
         })
         .catch(function (error) {
-          console.error("JSON을 불러오는 중 오류 발생:", error);
+          console.error("데이터 불러오기 실패:", error);
         });
     };
 
@@ -79,9 +78,9 @@
           "<td>" + (row["biz_se"] || "") + "</td>" +
           "<td>" + (row["prgrs_seq"] || "") + "</td>" +
           "<td>" + (row["stts"] || "") + "</td>" +
-          "<td>" + (makeLink(row["pstn_map"])) + "</td>" +
-          "<td>" + (makeLink(row["arlv"])) + "</td>" +
-          "<td>" + (makeLink(row["btch_map"])) + "</td>";
+          "<td>" + makeLink(row["pstn_map"]) + "</td>" +
+          "<td>" + makeLink(row["arlv"]) + "</td>" +
+          "<td>" + makeLink(row["btch_map"]) + "</td>";
 
         tbody.appendChild(tr);
       }
@@ -94,55 +93,76 @@
 
     function populateFilters(data) {
       populateSelect("filterCgg", data, "cgg_nm");
-      populateSelect("filterStdg", data, "stdg_nm");
       populateSelect("filterBiz", data, "biz_se");
       populateSelect("filterStep", data, "prgrs_seq");
       populateSelect("filterStatus", data, "stts");
     }
 
-    function populateSelect(selectId, data, key) {
-      var select = document.getElementById(selectId);
-      var uniqueValues = new Set();
+    function populateSelect(id, data, key) {
+      const select = document.getElementById(id);
+      const unique = [...new Set(data.map(d => d[key]).filter(Boolean))].sort();
 
-      data.forEach(function (item) {
-        if (item[key]) uniqueValues.add(item[key]);
-      });
-
-      Array.from(uniqueValues).sort().forEach(function (val) {
-        var option = document.createElement("option");
+      unique.forEach(val => {
+        const option = document.createElement("option");
         option.value = val;
         option.textContent = val;
         select.appendChild(option);
       });
     }
 
+    function updateStdgFilter() {
+      const selectedCgg = document.getElementById("filterCgg").value;
+      const stdgSelect = document.getElementById("filterStdg");
+      stdgSelect.innerHTML = "<option value=''>법정동 전체</option>";
+
+      const filtered = allData.filter(d => !selectedCgg || d["cgg_nm"] === selectedCgg);
+      const uniqueStdg = [...new Set(filtered.map(d => d["stdg_nm"]).filter(Boolean))].sort();
+
+      uniqueStdg.forEach(val => {
+        const option = document.createElement("option");
+        option.value = val;
+        option.textContent = val;
+        stdgSelect.appendChild(option);
+      });
+    }
+
     function search() {
-      var keyword = document.getElementById("keyword").value.toLowerCase();
-      var cgg = document.getElementById("filterCgg").value;
-      var stdg = document.getElementById("filterStdg").value;
-      var biz = document.getElementById("filterBiz").value;
-      var step = document.getElementById("filterStep").value;
-      var stts = document.getElementById("filterStatus").value;
+      const keyword = document.getElementById("keyword").value.toLowerCase();
+      const cgg = document.getElementById("filterCgg").value;
+      const stdg = document.getElementById("filterStdg").value;
+      const biz = document.getElementById("filterBiz").value;
+      const step = document.getElementById("filterStep").value;
+      const stts = document.getElementById("filterStatus").value;
 
-      var filtered = allData.filter(function (row) {
-        var matchKeyword =
-          (!keyword || (
-            (row["mtnc_area_nm"] && row["mtnc_area_nm"].toLowerCase().includes(keyword)) ||
-            (row["cgg_nm"] && row["cgg_nm"].toLowerCase().includes(keyword)) ||
-            (row["stdg_nm"] && row["stdg_nm"].toLowerCase().includes(keyword)) ||
-            (row["asct_nm"] && row["asct_nm"].toLowerCase().includes(keyword))
-          ));
+      const filtered = allData.filter(row => {
+        const matchKeyword = !keyword || (
+          (row["mtnc_area_nm"] || "").toLowerCase().includes(keyword) ||
+          (row["cgg_nm"] || "").toLowerCase().includes(keyword) ||
+          (row["stdg_nm"] || "").toLowerCase().includes(keyword) ||
+          (row["asct_nm"] || "").toLowerCase().includes(keyword)
+        );
 
-        var matchCgg = !cgg || row["cgg_nm"] === cgg;
-        var matchStdg = !stdg || row["stdg_nm"] === stdg;
-        var matchBiz = !biz || row["biz_se"] === biz;
-        var matchStep = !step || row["prgrs_seq"] === step;
-        var matchStts = !stts || row["stts"] === stts;
+        const matchCgg = !cgg || row["cgg_nm"] === cgg;
+        const matchStdg = !stdg || row["stdg_nm"] === stdg;
+        const matchBiz = !biz || row["biz_se"] === biz;
+        const matchStep = !step || row["prgrs_seq"] === step;
+        const matchStts = !stts || row["stts"] === stts;
 
         return matchKeyword && matchCgg && matchStdg && matchBiz && matchStep && matchStts;
       });
 
       renderTable(filtered);
+    }
+
+    function resetFilters() {
+      document.getElementById("keyword").value = "";
+      document.getElementById("filterCgg").value = "";
+      document.getElementById("filterBiz").value = "";
+      document.getElementById("filterStep").value = "";
+      document.getElementById("filterStatus").value = "";
+      updateStdgFilter();  // 자치구 초기화 시 법정동도 초기화
+      document.getElementById("filterStdg").value = "";
+      renderTable(allData);
     }
   </script>
 
