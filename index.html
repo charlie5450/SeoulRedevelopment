@@ -7,15 +7,22 @@
     table { width: 100%; border-collapse: collapse; }
     th, td { border: 1px solid #ccc; padding: 6px; text-align: center; }
     th { background: #f2f2f2; }
-    input { margin: 10px 0; padding: 6px; width: 300px; }
+    input, select, button { margin: 10px 5px; padding: 6px; }
   </style>
 </head>
 <body>
 
   <h2>서울시 재건축/재개발 현황</h2>
 
-  <input type="text" id="keyword" placeholder="정비구역명칭, 자치구 등 검색">
-  <button onclick="search()">검색</button>
+  <div>
+    <input type="text" id="keyword" placeholder="정비구역명칭, 자치구 등 검색">
+    <select id="filterCgg"><option value="">자치구 전체</option></select>
+    <select id="filterStdg"><option value="">법정동 전체</option></select>
+    <select id="filterBiz"><option value="">사업구분 전체</option></select>
+    <select id="filterStep"><option value="">진행단계 전체</option></select>
+    <select id="filterStatus"><option value="">상태 전체</option></select>
+    <button onclick="search()">검색</button>
+  </div>
 
   <table id="resultTable">
     <thead>
@@ -38,23 +45,23 @@
   <script>
     var allData = [];
 
-window.onload = function () {
-  fetch("./data/redevelopment.json")
-    .then(function (response) {
-      if (!response.ok) {
-        throw new Error("네트워크 응답에 문제가 있습니다.");
-      }
-      return response.json();
-    })
-    .then(function (json) {
-      allData = json.DATA;
-      renderTable(allData);
-    })
-    .catch(function (error) {
-      console.error("JSON을 불러오는 중 오류 발생:", error);
-    });
-};
-
+    window.onload = function () {
+      fetch("./data/redevelopment.json")
+        .then(function (response) {
+          if (!response.ok) {
+            throw new Error("네트워크 응답에 문제가 있습니다.");
+          }
+          return response.json();
+        })
+        .then(function (json) {
+          allData = json.DATA;
+          populateFilters(allData);
+          renderTable(allData);
+        })
+        .catch(function (error) {
+          console.error("JSON을 불러오는 중 오류 발생:", error);
+        });
+    };
 
     function renderTable(data) {
       var tbody = document.querySelector("#resultTable tbody");
@@ -85,21 +92,55 @@ window.onload = function () {
       return "<a href='https://cleanup.seoul.go.kr" + path + "' target='_blank'>보기</a>";
     }
 
+    function populateFilters(data) {
+      populateSelect("filterCgg", data, "cgg_nm");
+      populateSelect("filterStdg", data, "stdg_nm");
+      populateSelect("filterBiz", data, "biz_se");
+      populateSelect("filterStep", data, "prgrs_seq");
+      populateSelect("filterStatus", data, "stts");
+    }
+
+    function populateSelect(selectId, data, key) {
+      var select = document.getElementById(selectId);
+      var uniqueValues = new Set();
+
+      data.forEach(function (item) {
+        if (item[key]) uniqueValues.add(item[key]);
+      });
+
+      Array.from(uniqueValues).sort().forEach(function (val) {
+        var option = document.createElement("option");
+        option.value = val;
+        option.textContent = val;
+        select.appendChild(option);
+      });
+    }
+
     function search() {
       var keyword = document.getElementById("keyword").value.toLowerCase();
-      var filtered = [];
+      var cgg = document.getElementById("filterCgg").value;
+      var stdg = document.getElementById("filterStdg").value;
+      var biz = document.getElementById("filterBiz").value;
+      var step = document.getElementById("filterStep").value;
+      var stts = document.getElementById("filterStatus").value;
 
-      for (var i = 0; i < allData.length; i++) {
-        var row = allData[i];
-        if (
-          (row["mtnc_area_nm"] && row["mtnc_area_nm"].toLowerCase().indexOf(keyword) !== -1) ||
-          (row["cgg_nm"] && row["cgg_nm"].toLowerCase().indexOf(keyword) !== -1) ||
-          (row["stdg_nm"] && row["stdg_nm"].toLowerCase().indexOf(keyword) !== -1) ||
-          (row["asct_nm"] && row["asct_nm"].toLowerCase().indexOf(keyword) !== -1)
-        ) {
-          filtered.push(row);
-        }
-      }
+      var filtered = allData.filter(function (row) {
+        var matchKeyword =
+          (!keyword || (
+            (row["mtnc_area_nm"] && row["mtnc_area_nm"].toLowerCase().includes(keyword)) ||
+            (row["cgg_nm"] && row["cgg_nm"].toLowerCase().includes(keyword)) ||
+            (row["stdg_nm"] && row["stdg_nm"].toLowerCase().includes(keyword)) ||
+            (row["asct_nm"] && row["asct_nm"].toLowerCase().includes(keyword))
+          ));
+
+        var matchCgg = !cgg || row["cgg_nm"] === cgg;
+        var matchStdg = !stdg || row["stdg_nm"] === stdg;
+        var matchBiz = !biz || row["biz_se"] === biz;
+        var matchStep = !step || row["prgrs_seq"] === step;
+        var matchStts = !stts || row["stts"] === stts;
+
+        return matchKeyword && matchCgg && matchStdg && matchBiz && matchStep && matchStts;
+      });
 
       renderTable(filtered);
     }
