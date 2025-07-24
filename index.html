@@ -3,11 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <title>서울시 재건축/재개발 현황</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
-    table { width: 100%; border-collapse: collapse; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
     th, td { border: 1px solid #ccc; padding: 6px; text-align: center; }
     th { background: #f2f2f2; }
     input, select, button { margin: 10px 5px; padding: 6px; }
+    .pagination { margin-top: 10px; text-align: center; }
+    .pagination button { margin: 0 3px; padding: 5px 10px; }
   </style>
 </head>
 <body>
@@ -23,6 +26,7 @@
     <select id="filterStatus"><option value="">상태 전체</option></select>
     <button onclick="search()">검색</button>
     <button onclick="resetFilters()">초기화</button>
+    <button onclick="downloadExcel()">엑셀 다운로드</button>
   </div>
 
   <table id="resultTable">
@@ -43,52 +47,56 @@
     <tbody></tbody>
   </table>
 
+  <div class="pagination" id="pagination"></div>
+
   <script>
-    var allData = [];
+    let allData = [];
+    let filteredData = [];
+    const rowsPerPage = 20;
+    let currentPage = 1;
 
     window.onload = function () {
       fetch("./data/redevelopment.json")
-        .then(function (response) {
-          if (!response.ok) throw new Error("네트워크 오류");
-          return response.json();
-        })
-        .then(function (json) {
+        .then(res => res.json())
+        .then(json => {
           allData = json.DATA;
           populateFilters(allData);
-          renderTable(allData);
-        })
-        .catch(function (error) {
-          console.error("데이터 불러오기 실패:", error);
+          filteredData = allData;
+          renderPage(1);
         });
     };
 
-    function renderTable(data) {
-      var tbody = document.querySelector("#resultTable tbody");
+    function renderPage(page) {
+      currentPage = page;
+      const tbody = document.querySelector("#resultTable tbody");
       tbody.innerHTML = "";
 
-      for (var i = 0; i < data.length; i++) {
-        var row = data[i];
-        var tr = document.createElement("tr");
+      const start = (page - 1) * rowsPerPage;
+      const end = start + rowsPerPage;
+      const pageData = filteredData.slice(start, end);
 
+      for (let row of pageData) {
+        const tr = document.createElement("tr");
         tr.innerHTML =
-          "<td>" + (row["mtnc_area_nm"] || "") + "</td>" +
-          "<td>" + (row["cgg_nm"] || "") + "</td>" +
-          "<td>" + (row["stdg_nm"] || "") + "</td>" +
-          "<td>" + (row["asct_nm"] || "") + "</td>" +
-          "<td>" + (row["biz_se"] || "") + "</td>" +
-          "<td>" + (row["prgrs_seq"] || "") + "</td>" +
-          "<td>" + (row["stts"] || "") + "</td>" +
-          "<td>" + makeLink(row["pstn_map"]) + "</td>" +
-          "<td>" + makeLink(row["arlv"]) + "</td>" +
-          "<td>" + makeLink(row["btch_map"]) + "</td>";
-
+          `<td>${row["mtnc_area_nm"] || ""}</td>
+           <td>${row["cgg_nm"] || ""}</td>
+           <td>${row["stdg_nm"] || ""}</td>
+           <td>${row["asct_nm"] || ""}</td>
+           <td>${row["biz_se"] || ""}</td>
+           <td>${row["prgrs_seq"] || ""}</td>
+           <td>${row["stts"] || ""}</td>
+           <td>${makeLink(row["pstn_map"])}</td>
+           <td>${makeLink(row["arlv"])}</td>
+           <td>${makeLink(row["btch_map"])}</td>`;
         tbody.appendChild(tr);
       }
+
+      renderPagination();
     }
 
     function makeLink(path) {
       if (!path) return "";
-      return "<a href='https://cleanup.seoul.go.kr" + path + "' target='_blank'>보기</a>";
+      return `<a href='https://cleanup.seoul.go.kr${path}' target='_blank'>보기</a>`;
     }
 
     function populateFilters(data) {
@@ -101,7 +109,6 @@
     function populateSelect(id, data, key) {
       const select = document.getElementById(id);
       const unique = [...new Set(data.map(d => d[key]).filter(Boolean))].sort();
-
       unique.forEach(val => {
         const option = document.createElement("option");
         option.value = val;
@@ -114,10 +121,8 @@
       const selectedCgg = document.getElementById("filterCgg").value;
       const stdgSelect = document.getElementById("filterStdg");
       stdgSelect.innerHTML = "<option value=''>법정동 전체</option>";
-
       const filtered = allData.filter(d => !selectedCgg || d["cgg_nm"] === selectedCgg);
       const uniqueStdg = [...new Set(filtered.map(d => d["stdg_nm"]).filter(Boolean))].sort();
-
       uniqueStdg.forEach(val => {
         const option = document.createElement("option");
         option.value = val;
@@ -134,24 +139,24 @@
       const step = document.getElementById("filterStep").value;
       const stts = document.getElementById("filterStatus").value;
 
-      const filtered = allData.filter(row => {
+      filteredData = allData.filter(row => {
         const matchKeyword = !keyword || (
           (row["mtnc_area_nm"] || "").toLowerCase().includes(keyword) ||
           (row["cgg_nm"] || "").toLowerCase().includes(keyword) ||
           (row["stdg_nm"] || "").toLowerCase().includes(keyword) ||
           (row["asct_nm"] || "").toLowerCase().includes(keyword)
         );
-
-        const matchCgg = !cgg || row["cgg_nm"] === cgg;
-        const matchStdg = !stdg || row["stdg_nm"] === stdg;
-        const matchBiz = !biz || row["biz_se"] === biz;
-        const matchStep = !step || row["prgrs_seq"] === step;
-        const matchStts = !stts || row["stts"] === stts;
-
-        return matchKeyword && matchCgg && matchStdg && matchBiz && matchStep && matchStts;
+        return (
+          matchKeyword &&
+          (!cgg || row["cgg_nm"] === cgg) &&
+          (!stdg || row["stdg_nm"] === stdg) &&
+          (!biz || row["biz_se"] === biz) &&
+          (!step || row["prgrs_seq"] === step) &&
+          (!stts || row["stts"] === stts)
+        );
       });
 
-      renderTable(filtered);
+      renderPage(1);
     }
 
     function resetFilters() {
@@ -160,9 +165,48 @@
       document.getElementById("filterBiz").value = "";
       document.getElementById("filterStep").value = "";
       document.getElementById("filterStatus").value = "";
-      updateStdgFilter();  // 자치구 초기화 시 법정동도 초기화
+      updateStdgFilter();
       document.getElementById("filterStdg").value = "";
-      renderTable(allData);
+      filteredData = allData;
+      renderPage(1);
+    }
+
+    function renderPagination() {
+      const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+      const container = document.getElementById("pagination");
+      container.innerHTML = "";
+
+      for (let i = 1; i <= totalPages; i++) {
+        const btn = document.createElement("button");
+        btn.textContent = i;
+        if (i === currentPage) {
+          btn.style.fontWeight = "bold";
+        }
+        btn.onclick = () => renderPage(i);
+        container.appendChild(btn);
+      }
+    }
+
+    function downloadExcel() {
+      const start = (currentPage - 1) * rowsPerPage;
+      const end = start + rowsPerPage;
+      const exportData = filteredData.slice(start, end).map(row => ({
+        "정비구역명칭": row["mtnc_area_nm"] || "",
+        "자치구": row["cgg_nm"] || "",
+        "법정동": row["stdg_nm"] || "",
+        "조합명": row["asct_nm"] || "",
+        "사업구분": row["biz_se"] || "",
+        "진행단계": row["prgrs_seq"] || "",
+        "상태": row["stts"] || "",
+        "위치도": row["pstn_map"] ? "https://cleanup.seoul.go.kr" + row["pstn_map"] : "",
+        "조감도": row["arlv"] ? "https://cleanup.seoul.go.kr" + row["arlv"] : "",
+        "배치도": row["btch_map"] ? "https://cleanup.seoul.go.kr" + row["btch_map"] : ""
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "재개발현황");
+      XLSX.writeFile(wb, "서울시_재개발_현황.xlsx");
     }
   </script>
 
