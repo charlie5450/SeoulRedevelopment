@@ -3,266 +3,141 @@
 <head>
   <meta charset="UTF-8">
   <title>서울시 재건축/재개발 현황</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <style>
-    table { margin-top: 10px; }
-        .pagination button.active { font-weight: bold; }
-        .pagination button { margin: 0 2px; }
-
-      table th:nth-child(2), table td:nth-child(2),
-      table th:nth-child(3), table td:nth-child(3),
-      table th:nth-child(7), table td:nth-child(7) {
-        min-width: 100px;
-      }
-      table th:nth-child(8), table td:nth-child(8),
-      table th:nth-child(9), table td:nth-child(9),
-      table th:nth-child(10), table td:nth-child(10) {
-      min-width: 80px;
-    }
+    body { padding: 20px; }
+    .card-grid { display: flex; flex-wrap: wrap; gap: 1rem; }
+    .redevelopment-card { width: calc(33% - 1rem); border: 1px solid #ccc; border-radius: 0.5rem; padding: 1rem; }
+    .redevelopment-card img { width: 100%; height: auto; object-fit: cover; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: center; }
+    .autocomplete-suggestions { border: 1px solid #ccc; background: #fff; position: absolute; z-index: 1000; max-height: 200px; overflow-y: auto; }
+    .autocomplete-suggestion { padding: 4px 8px; cursor: pointer; }
+    .autocomplete-suggestion:hover { background: #f0f0f0; }
+    .image-preview { position: absolute; z-index: 9999; background: white; border: 1px solid #ccc; padding: 4px; display: none; }
+    .image-preview img { max-width: 300px; height: auto; }
   </style>
 </head>
-<body class="container py-4">
-
-  <h2 class="mb-4">서울시 재건축/재개발 현황</h2>
-
-  <div class="row g-2 mb-3">
-    <div class="col-md-4 col-lg-3">
-      <input type="text" class="form-control" id="keyword" placeholder="정비구역명칭, 자치구 등 검색">
-    </div>
-    <div class="col-md-2">
-      <select class="form-select" id="filterCgg" onchange="updateStdgFilter()">
-        <option value="">자치구 전체</option>
-      </select>
-    </div>
-    <div class="col-md-2">
-      <select class="form-select" id="filterStdg">
-        <option value="">법정동 전체</option>
-      </select>
-    </div>
-    <div class="col-md-2">
-      <select class="form-select" id="filterBiz">
-        <option value="">사업구분 전체</option>
-      </select>
-    </div>
-    <div class="col-md-2">
-      <select class="form-select" id="filterStep">
-        <option value="">진행단계 전체</option>
-      </select>
-    </div>
-    <div class="col-md-2">
-      <select class="form-select" id="filterStatus">
-        <option value="">상태 전체</option>
-      </select>
-    </div>
-    <div class="col-auto">
-      <button class="btn btn-primary" onclick="search()">검색</button>
-      <button class="btn btn-secondary" onclick="resetFilters()">초기화</button>
-      <button class="btn btn-success" onclick="downloadExcel()">엑셀 다운로드</button>
-    </div>
+<body>
+  <div class="mb-3 d-flex align-items-center">
+    <input type="text" id="searchInput" class="form-control me-2" placeholder="법정동명 입력" style="width: 300px;" autocomplete="off">
+    <button class="btn btn-primary" onclick="toggleView()">보기 전환</button>
   </div>
+  <div id="autocomplete" class="autocomplete-suggestions"></div>
+  <div id="listContainer"></div>
 
-  <div class="table-responsive">
-    <table class="table table-bordered table-hover" id="resultTable">
-      <thead class="table-light text-center align-middle">
-        <tr>
-          <th>정비구역명칭</th>
-          <th>자치구</th>
-          <th>법정동</th>
-          <th>조합명</th>
-          <th>사업구분</th>
-          <th>진행단계</th>
-          <th>상태</th>
-          <th>위치도</th>
-          <th>조감도</th>
-          <th>배치도</th>
-        </tr>
-      </thead>
-      <tbody class="text-center align-middle"></tbody>
-    </table>
-  </div>
-
-  <div class="d-flex justify-content-center mt-3" id="pagination"></div>
+  <div class="image-preview" id="imgPreview"></div>
 
   <script>
-    let allData = [];
-    let filteredData = [];
-    const rowsPerPage = 20;
-    let currentPage = 1;
+    let data = []; // JSON 데이터 바인딩용
+    let isCardView = false;
 
-    window.onload = function () {
-      fetch("./data/redevelopment.json")
-        .then(res => res.json())
-        .then(json => {
-          allData = json.DATA;
-          populateFilters(allData);
-          filteredData = allData;
-          renderPage(1);
+    async function fetchData() {
+      const response = await fetch('./data/seoul.json');
+      const json = await response.json();
+      data = json.DATA;
+      renderList(data);
+    }
+
+    function renderList(items) {
+      const container = document.getElementById('listContainer');
+      container.innerHTML = '';
+
+      if (isCardView) {
+        const grid = document.createElement('div');
+        grid.className = 'card-grid';
+        items.forEach(item => {
+          const card = document.createElement('div');
+          card.className = 'redevelopment-card';
+          card.innerHTML = `
+            <h5>${item['사업명']}</h5>
+            <p>${item['법정동']}</p>
+            <a href="${makeImageLink(item['위치도'])}" class="imglink" data-img="${makeImageLink(item['위치도'])}">위치도</a>
+          `;
+          grid.appendChild(card);
         });
-    };
-
-    function renderPage(page) {
-      currentPage = page;
-      const tbody = document.querySelector("#resultTable tbody");
-      tbody.innerHTML = "";
-
-      const start = (page - 1) * rowsPerPage;
-      const end = start + rowsPerPage;
-      const pageData = filteredData.slice(start, end);
-
-      for (let row of pageData) {
-        const tr = document.createElement("tr");
-        tr.innerHTML =
-          `<td>${row["mtnc_area_nm"] || ""}</td>
-           <td>${row["cgg_nm"] || ""}</td>
-           <td>${row["stdg_nm"] || ""}</td>
-           <td>${row["asct_nm"] || ""}</td>
-           <td>${row["biz_se"] || ""}</td>
-           <td>${row["prgrs_seq"] || ""}</td>
-           <td>${row["stts"] || ""}</td>
-           <td>${makeLink(row["pstn_map"])}</td>
-           <td>${makeLink(row["arlv"])}</td>
-           <td>${makeLink(row["btch_map"])}</td>`;
-        tbody.appendChild(tr);
+        container.appendChild(grid);
+      } else {
+        const table = document.createElement('table');
+        table.innerHTML = `
+          <thead>
+            <tr><th>사업명</th><th>법정동</th><th>위치도</th></tr>
+          </thead>
+          <tbody>
+            ${items.map(item => `
+              <tr>
+                <td>${item['사업명']}</td>
+                <td>${item['법정동']}</td>
+                <td><a href="${makeImageLink(item['위치도'])}" class="imglink" data-img="${makeImageLink(item['위치도'])}">보기</a></td>
+              </tr>`).join('')}
+          </tbody>
+        `;
+        container.appendChild(table);
       }
-
-      renderPagination();
     }
 
-    function makeLink(path) {
-      if (!path) return "";
-      return `<a href='https://cleanup.seoul.go.kr${path}' target='_blank'>보기</a>`;
+    function makeImageLink(url) {
+      if (!url) return '#';
+      return url.replace('https://charlie5450.github.io/SeoulRedevelopment/', 'https://');
     }
 
-    function populateFilters(data) {
-      populateSelect("filterCgg", data, "cgg_nm");
-      populateSelect("filterBiz", data, "biz_se");
-      populateSelect("filterStep", data, "prgrs_seq");
-      populateSelect("filterStatus", data, "stts");
+    function toggleView() {
+      isCardView = !isCardView;
+      renderList(data);
     }
 
-    function populateSelect(id, data, key) {
-      const select = document.getElementById(id);
-      const unique = [...new Set(data.map(d => d[key]).filter(Boolean))].sort();
-      unique.forEach(val => {
-        const option = document.createElement("option");
-        option.value = val;
-        option.textContent = val;
-        select.appendChild(option);
-      });
-    }
+    document.getElementById('searchInput').addEventListener('input', function () {
+      const keyword = this.value.trim();
+      const suggestBox = document.getElementById('autocomplete');
+      suggestBox.innerHTML = '';
 
-    function updateStdgFilter() {
-      const selectedCgg = document.getElementById("filterCgg").value;
-      const stdgSelect = document.getElementById("filterStdg");
-      stdgSelect.innerHTML = "<option value=''>법정동 전체</option>";
-      const filtered = allData.filter(d => !selectedCgg || d["cgg_nm"] === selectedCgg);
-      const uniqueStdg = [...new Set(filtered.map(d => d["stdg_nm"]).filter(Boolean))].sort();
-      uniqueStdg.forEach(val => {
-        const option = document.createElement("option");
-        option.value = val;
-        option.textContent = val;
-        stdgSelect.appendChild(option);
-      });
-    }
+      if (keyword.length > 0) {
+        const suggestions = [...new Set(data.map(d => d['법정동']).filter(name => name.includes(keyword)))];
+        suggestions.forEach(s => {
+          const div = document.createElement('div');
+          div.className = 'autocomplete-suggestion';
+          div.innerText = s;
+          div.addEventListener('click', function () {
+            document.getElementById('searchInput').value = s;
+            suggestBox.innerHTML = '';
+            const filtered = data.filter(item => item['법정동'].includes(s));
+            renderList(filtered);
+          });
+          suggestBox.appendChild(div);
+        });
+        const rect = this.getBoundingClientRect();
+        suggestBox.style.top = `${rect.bottom + window.scrollY}px`;
+        suggestBox.style.left = `${rect.left + window.scrollX}px`;
+        suggestBox.style.width = `${rect.width}px`;
+      }
+    });
 
-    function search() {
-      const keyword = document.getElementById("keyword").value.toLowerCase();
-      const cgg = document.getElementById("filterCgg").value;
-      const stdg = document.getElementById("filterStdg").value;
-      const biz = document.getElementById("filterBiz").value;
-      const step = document.getElementById("filterStep").value;
-      const stts = document.getElementById("filterStatus").value;
+    document.addEventListener('mouseover', function (e) {
+      if (e.target.classList.contains('imglink')) {
+        const imgUrl = e.target.getAttribute('data-img');
+        const preview = document.getElementById('imgPreview');
+        preview.innerHTML = `<img src="${imgUrl}" alt="미리보기">`;
+        preview.style.display = 'block';
+        preview.style.top = `${e.pageY + 10}px`;
+        preview.style.left = `${e.pageX + 10}px`;
+      }
+    });
 
-      filteredData = allData.filter(row => {
-        const matchKeyword = !keyword || (
-          (row["mtnc_area_nm"] || "").toLowerCase().includes(keyword) ||
-          (row["cgg_nm"] || "").toLowerCase().includes(keyword) ||
-          (row["stdg_nm"] || "").toLowerCase().includes(keyword) ||
-          (row["asct_nm"] || "").toLowerCase().includes(keyword)
-        );
-        return (
-          matchKeyword &&
-          (!cgg || row["cgg_nm"] === cgg) &&
-          (!stdg || row["stdg_nm"] === stdg) &&
-          (!biz || row["biz_se"] === biz) &&
-          (!step || row["prgrs_seq"] === step) &&
-          (!stts || row["stts"] === stts)
-        );
-      });
+    document.addEventListener('mousemove', function (e) {
+      const preview = document.getElementById('imgPreview');
+      if (preview.style.display === 'block') {
+        preview.style.top = `${e.pageY + 10}px`;
+        preview.style.left = `${e.pageX + 10}px`;
+      }
+    });
 
-      renderPage(1);
-    }
+    document.addEventListener('mouseout', function (e) {
+      if (e.target.classList.contains('imglink')) {
+        document.getElementById('imgPreview').style.display = 'none';
+      }
+    });
 
-    function resetFilters() {
-      document.getElementById("keyword").value = "";
-      document.getElementById("filterCgg").value = "";
-      document.getElementById("filterBiz").value = "";
-      document.getElementById("filterStep").value = "";
-      document.getElementById("filterStatus").value = "";
-      updateStdgFilter();
-      document.getElementById("filterStdg").value = "";
-      filteredData = allData;
-      renderPage(1);
-    }
-
-  function renderPagination() {
-    const totalPages = Math.ceil(filteredData.length / rowsPerPage);
-    const container = document.getElementById("pagination");
-    container.innerHTML = "";
-
-    const groupSize = 5;
-    const currentGroup = Math.floor((currentPage - 1) / groupSize);
-    const startPage = currentGroup * groupSize + 1;
-    const endPage = Math.min(startPage + groupSize - 1, totalPages);
-
-    const createBtn = (label, page, disabled = false) => {
-      const btn = document.createElement("button");
-      btn.className = `btn btn-outline-primary btn-sm mx-1 ${disabled ? "disabled" : ""}`;
-      btn.textContent = label;
-      if (!disabled) btn.onclick = () => renderPage(page);
-      return btn;
-    };
-
-    // 이전 그룹
-    container.appendChild(createBtn("«", startPage - 1, startPage === 1));
-
-    // 페이지 숫자
-    for (let i = startPage; i <= endPage; i++) {
-      const btn = document.createElement("button");
-      btn.className = `btn btn-sm mx-1 ${i === currentPage ? "btn-primary" : "btn-outline-primary"}`;
-      btn.textContent = i;
-      btn.onclick = () => renderPage(i);
-      container.appendChild(btn);
-    }
-
-    // 다음 그룹
-    container.appendChild(createBtn("»", endPage + 1, endPage === totalPages));
-  }
-
-
-    function downloadExcel() {
-      const start = (currentPage - 1) * rowsPerPage;
-      const end = start + rowsPerPage;
-      const exportData = filteredData.slice(start, end).map(row => ({
-        "정비구역명칭": row["mtnc_area_nm"] || "",
-        "자치구": row["cgg_nm"] || "",
-        "법정동": row["stdg_nm"] || "",
-        "조합명": row["asct_nm"] || "",
-        "사업구분": row["biz_se"] || "",
-        "진행단계": row["prgrs_seq"] || "",
-        "상태": row["stts"] || "",
-        "위치도": row["pstn_map"] ? "https://cleanup.seoul.go.kr" + row["pstn_map"] : "",
-        "조감도": row["arlv"] ? "https://cleanup.seoul.go.kr" + row["arlv"] : "",
-        "배치도": row["btch_map"] ? "https://cleanup.seoul.go.kr" + row["btch_map"] : ""
-      }));
-
-      const ws = XLSX.utils.json_to_sheet(exportData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "재개발현황");
-      XLSX.writeFile(wb, "서울시_재개발_현황.xlsx");
-    }
+    fetchData();
   </script>
-
 </body>
 </html>
