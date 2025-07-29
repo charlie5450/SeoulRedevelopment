@@ -7,8 +7,19 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     table { margin-top: 10px; }
-    .pagination button.active { font-weight: bold; }
-    .pagination button { margin: 0 2px; }
+        .pagination button.active { font-weight: bold; }
+        .pagination button { margin: 0 2px; }
+
+      table th:nth-child(2), table td:nth-child(2),
+      table th:nth-child(3), table td:nth-child(3),
+      table th:nth-child(7), table td:nth-child(7) {
+        min-width: 100px;
+      }
+      table th:nth-child(8), table td:nth-child(8),
+      table th:nth-child(9), table td:nth-child(9),
+      table th:nth-child(10), table td:nth-child(10) {
+      min-width: 80px;
+    }
   </style>
 </head>
 <body class="container py-4">
@@ -195,19 +206,40 @@
       renderPage(1);
     }
 
-    function renderPagination() {
-      const totalPages = Math.ceil(filteredData.length / rowsPerPage);
-      const container = document.getElementById("pagination");
-      container.innerHTML = "";
+  function renderPagination() {
+    const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+    const container = document.getElementById("pagination");
+    container.innerHTML = "";
 
-      for (let i = 1; i <= totalPages; i++) {
-        const btn = document.createElement("button");
-        btn.className = "btn btn-outline-primary btn-sm" + (i === currentPage ? " active" : "");
-        btn.textContent = i;
-        btn.onclick = () => renderPage(i);
-        container.appendChild(btn);
-      }
+    const groupSize = 5;
+    const currentGroup = Math.floor((currentPage - 1) / groupSize);
+    const startPage = currentGroup * groupSize + 1;
+    const endPage = Math.min(startPage + groupSize - 1, totalPages);
+
+    const createBtn = (label, page, disabled = false) => {
+      const btn = document.createElement("button");
+      btn.className = `btn btn-outline-primary btn-sm mx-1 ${disabled ? "disabled" : ""}`;
+      btn.textContent = label;
+      if (!disabled) btn.onclick = () => renderPage(page);
+      return btn;
+    };
+
+    // 이전 그룹
+    container.appendChild(createBtn("«", startPage - 1, startPage === 1));
+
+    // 페이지 숫자
+    for (let i = startPage; i <= endPage; i++) {
+      const btn = document.createElement("button");
+      btn.className = `btn btn-sm mx-1 ${i === currentPage ? "btn-primary" : "btn-outline-primary"}`;
+      btn.textContent = i;
+      btn.onclick = () => renderPage(i);
+      container.appendChild(btn);
     }
+
+    // 다음 그룹
+    container.appendChild(createBtn("»", endPage + 1, endPage === totalPages));
+  }
+
 
     function downloadExcel() {
       const start = (currentPage - 1) * rowsPerPage;
