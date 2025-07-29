@@ -64,9 +64,8 @@
 
 ## 🚀 실행 방법
 
-1. `index.html`을 웹 브라우저에서 실행
-2. `data/redevelopment.json` 파일을 동일 디렉터리에 준비
-3. 필터를 조정하여 원하는 항목을 검색하거나, 엑셀 다운로드 버튼을 클릭
+하단 URL 클릭<br/>
+https://charlie5450.github.io/SeoulRedevelopment/
 
 ---
 
